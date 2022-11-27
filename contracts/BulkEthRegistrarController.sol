@@ -1,125 +1,156 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: MIT
 
-pragma solidity ^0.8.17;
-
-import "@ensdomains/ens-contracts/contracts/ethregistrar/ETHRegistrarController.sol";
+pragma solidity ^0.8.12; 
+ 
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/interfaces/IERC20.sol";
+import "./IETHRegistrarController.sol";
+import "./BulkQuery.sol";
+import "./BulkResult.sol";
 
 contract BulkEthRegistrarController is Ownable {
-     
-    struct EnsQuery {
-        string  name; 
-        address owner;
-        uint256 duration;
-        bytes32 secret; 
-        address resolver; 
-        bytes[] data;
-        bool reverseRecord;
-        uint32 fuses;
-        uint64 wrapperExpiry;
-        uint256 timestamp; 
-        uint256 totalPrice;
-    }
 
-    struct EnsPrice {
-        string name;
-        address owner;
-        uint256 duration;
-        IPriceOracle.Price price;
-    }
-  
-    mapping(address => EnsQuery[]) private userQueries;
-     
-     event NameRegistered(
-        string name,
-        bytes32 indexed label,
-        address indexed owner,
-        uint256 baseCost,
-        uint256 premium,
-        uint256 duration
-    ); 
-
-    address public baseControllerAddress = 0x283Af0B28c62C092C9727F1Ee09c02CA627EB7F5;
-    ETHRegistrarController private _controller = ETHRegistrarController(baseControllerAddress);
-
-    function updateEthRegistrarController(address controller) external onlyOwner {
-        baseControllerAddress = controller;
-    } 
-
-    function random(address userAddress) internal view returns (bytes32) {
-        return bytes32(keccak256(abi.encodePacked(block.difficulty, block.timestamp, userAddress)));
-    }
+    event NameRegistered(string name,  address indexed owner, uint256 cost,  uint256 duration);
+    event NameRenewed(string name,  address indexed owner, uint256 cost,  uint256 duration);
+         
+    // TODO: Islemler gec yapılırsa fiyat degısımleri olabilir. Bir miktar fazla göndermesini isteyebiliriz.
  
     function withdraw(address payee) external onlyOwner payable {
         payable(payee).transfer(address(this).balance);
     }
  
     function withdrawOf(address payee, address token) external onlyOwner payable {
-        IERC20(token).transfer(payable(payee), address(this).balance);
+        IERC20(token).transfer(payable(payee), IERC20(token).balanceOf(address(this)));
     } 
 
-    function getPrice(string calldata name, uint duration) public view returns(IPriceOracle.Price memory totalPrice) {
-        return _controller.rentPrice(name, duration); 
-    }
-
-    function valid(string memory name) public view returns (bool) {
-        return _controller.valid(name);
-    }
-
-    function available(string memory name) public view returns (bool) {
-       return _controller.available(name);
-    } 
-
-    function getTotalPrice(string calldata name, uint duration) public view returns(uint totalPrice) {
-        IPriceOracle.Price memory price = _controller.rentPrice(name, duration);
-        totalPrice = price.base + price.premium;
-    }
-
-    function getPrices(EnsQuery[] calldata query) public view returns(EnsPrice[] memory prices, uint256 totalPrice) {
-        prices = new EnsPrice[](query.length);
-        for (uint i = 0; i < query.length; i++) {
-            EnsQuery memory q = query[i];
-            IPriceOracle.Price memory price = _controller.rentPrice(q.name, q.duration);
-            totalPrice += price.base + price.premium;
-            prices[i] = EnsPrice(q.name, msg.sender, q.duration, price);
-        }
+    function balance() external view returns(uint256) {
+        return address(this).balance;
     }
  
-    function makeBulkCommitment(EnsQuery[] calldata query) external {
-        delete userQueries[msg.sender];
+    function balanceOf(address token) external view returns(uint256) {
+        return IERC20(token).balanceOf(address(this));
+    }
 
-        for(uint i = 0; i < query.length; i++) {
-            bytes32 secret = random(msg.sender);
-            EnsQuery memory q = query[i];
-            q.owner = msg.sender;
-            q.secret = secret;
-            bytes32 commitment = _controller.makeCommitment(q.name, q.owner, q.duration, secret, q.resolver, q.data, q.reverseRecord, q.fuses, q.wrapperExpiry);
-            _controller.commit(commitment);
-            userQueries[msg.sender].push( q );
+    function available(address controller, string memory name) public view returns(bool) {
+        return IETHRegistrarController(controller).available(name);
+    }
+
+    function rentPrice(address controller, string memory name, uint duration) public view returns(uint) {
+        return IETHRegistrarController(controller).rentPrice(name, duration);
+    }
+    
+    function makeCommitment(address controller,string memory name, address owner, bytes32 secret) pure public returns(bytes32) {
+        return makeCommitmentWithConfig(controller, name, owner, secret, address(0), address(0));
+    }
+
+    function makeCommitmentWithConfig(address controller, string memory name, address owner, bytes32 secret, address resolver, address addr) pure public returns(bytes32) {
+        return IETHRegistrarController(controller).makeCommitmentWithConfig(name, owner, secret, resolver, addr);
+    }
+
+    function commit(address controller, bytes32 commitment) public {
+        IETHRegistrarController(controller).commit(commitment);
+    }
+  
+    function register(address controller, string calldata name, address owner, uint duration, bytes32 secret) external payable {
+        registerWithConfig(controller, name, owner, duration, secret, address(0), address(0));
+    }
+
+    function registerWithConfig(address controller, string memory name, address owner, uint duration, bytes32 secret, address resolver, address addr) public payable {
+        uint cost = rentPrice(controller, name, duration);
+        require( msg.value >= cost, "BulkEthRegistrarController: Not enough ether sent");
+        
+        // TODO: commission
+
+        IETHRegistrarController(controller).registerWithConfig{ value: cost }(name, owner, duration, secret, resolver, addr);
+
+        emit NameRegistered(name, owner, cost, duration);
+    } 
+
+    function renew(address controller, string calldata name, uint duration) external payable {
+        uint cost = rentPrice(controller, name, duration);
+        require( msg.value >= cost, "BulkEthRegistrarController: Not enough ether sent");
+
+        IETHRegistrarController(controller).renew{ value: cost }(name, duration);
+    }
+
+    function getBytes(string calldata secret) public pure returns (bytes32) {
+        return bytes32(keccak256(abi.encodePacked(secret)));
+    }
+
+    function bulkAvailable(address controller, string[] memory names) public view returns (bool[] memory) {
+        bool[] memory _availables = new bool[](names.length);
+        for (uint i = 0; i < names.length; i++) {
+            _availables[i] = available(controller, names[i]);
+        }
+        return _availables;
+    }
+
+    function bulkRentPrice(address controller, BulkQuery[] memory query) public view returns(BulkResult[] memory result, uint totalPrice) {
+        result = new BulkResult[](query.length);
+        for (uint i = 0; i < query.length; i++) {
+            BulkQuery memory q = query[i];
+            bool _available = available(controller, q.name);
+            uint _price = rentPrice(controller, q.name, q.duration);
+            totalPrice += _price;
+            result[i] = BulkResult(q.name, _available, q.duration, _price);
+        }
+    } 
+
+    function bulkCommit(address controller, address owner, BulkQuery[] calldata query, string calldata secret) external { 
+       bulkCommitWithConfig(controller, owner, query, secret, address(0), address(0));
+    }
+
+    function bulkCommitWithConfig(address controller, address owner, BulkQuery[] calldata query, string calldata secret, address resolver, address addr) public { 
+        for(uint i = 0; i < query.length; i++) { 
+            BulkQuery memory c = query[i]; 
+            bytes32 _secret = getBytes(secret);
+            bytes32 commitment = makeCommitmentWithConfig(controller, c.name, owner, _secret, resolver, addr);
+            commit(controller, commitment);
+        } 
+    }
+
+    function bulkRegister(address controller, address owner, BulkQuery[] calldata query, string calldata secret) external payable {
+        bulkRegisterWithConfig(controller, owner, query, secret, address(0), address(0));
+    }
+
+    function bulkRegisterWithConfig(address controller, address owner, BulkQuery[] calldata query, string calldata secret, address resolver, address addr) public payable {
+        uint256 totalCost; 
+        (, totalCost) = bulkRentPrice(controller, query);
+        
+        // TODO: you are not the owner
+        // TODO: commmision
+
+        require( msg.value >= totalCost, "BulkEthRegistrarController: Not enough ether sent");
+ 
+        for( uint i = 0; i < query.length; ++i ) {
+            BulkQuery memory q = query[i];
+            bytes32 _secret = getBytes(secret);
+
+            uint cost = rentPrice(controller, q.name, q.duration);
+            IETHRegistrarController(controller).registerWithConfig{ value: cost }(q.name, owner, q.duration, _secret, resolver, addr);
+
+            emit NameRegistered(q.name, owner, cost, q.duration);
         } 
     } 
-  
-    function bulkRegistrar(EnsQuery[] calldata query) external payable {
-        uint256 totalPrice;
-        (, totalPrice) = getPrices(query);
 
-        require( msg.value >= totalPrice, "BulkEthRegistrarController: not enough ether provided");
+    function bulkRenew(address controller, BulkQuery[] calldata query) external payable {
+        uint256 totalCost; 
+        (, totalCost) = bulkRentPrice(controller, query);
+ 
+        // TODO: you are not the owner
+        // TODO: commmision
 
-        EnsQuery[] memory queries = userQueries[msg.sender];
+        require( msg.value >= totalCost, "BulkEthRegistrarController: Not enough ether sent");
 
-        require(queries.length > 0, "User has no commitment");
+        for( uint i = 0; i < query.length; ++i ) {
+            BulkQuery memory q = query[i];
 
-        for( uint i = 0; i < queries.length; ++i ) {
-            EnsQuery memory q = queries[i];
+            uint cost = rentPrice(controller, q.name, q.duration);
+            IETHRegistrarController(controller).renew{ value: cost }(q.name, q.duration);
 
-            IPriceOracle.Price memory price = _controller.rentPrice(q.name, q.duration);
-            
-            _controller.register{ value: price.base + price.premium }(q.name, q.owner, q.duration, q.secret, q.resolver, q.data, q.reverseRecord, q.fuses, q.wrapperExpiry);
-            
-            emit NameRegistered(q.name, keccak256(bytes(q.name)), q.owner, price.base, price.premium, q.duration);
-              
-            delete userQueries[msg.sender];  
-        }
+            emit NameRenewed(q.name, msg.sender, cost, q.duration);
+        } 
+
+        
     }
 }
