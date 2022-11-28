@@ -10,7 +10,7 @@ async function main() {
   
   console.log(`Deploying...`);
 
-  const controller = await Controller.deploy();  
+  const controller = await Controller.deploy(process.env.BASE_CONTROLLER);  
 
   console.log(`Deployed. Getting deployed contract...`);
 
