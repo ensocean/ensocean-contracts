@@ -4,25 +4,26 @@ pragma solidity ^0.8.12;
  
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/interfaces/IERC20.sol";
+import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "./IETHRegistrarController.sol";
 import "./BulkQuery.sol";
 import "./BulkResult.sol";
 
 contract BulkEthRegistrarController is Ownable {
+    using SafeMath for uint;
 
     event NameRegistered(string name,  address indexed owner, uint256 cost,  uint256 duration);
     event NameRenewed(string name,  address indexed owner, uint256 cost,  uint256 duration);
-         
-    // TODO: Islemler gec yapılırsa fiyat degısımleri olabilir. Bir miktar fazla göndermesini isteyebiliriz.
-    address _baseController = 0x283Af0B28c62C092C9727F1Ee09c02CA627EB7F5;
 
-    constructor(address baseController) {
-        _baseController = baseController;
-    }
-
-    function updateBaseController(address baseController) onlyOwner external {
-        _baseController = baseController;
-    }
+    uint private _feeRatio = 10; 
+      
+    function getFeeRatio() public view returns(uint) {
+        return _feeRatio;
+    } 
+    
+    function setFeeRatio(uint feeRatio) onlyOwner external {
+        _feeRatio = feeRatio;
+    } 
 
     function withdraw(address payee) external onlyOwner payable {
         payable(payee).transfer(address(this).balance);
@@ -40,130 +41,132 @@ contract BulkEthRegistrarController is Ownable {
         return IERC20(token).balanceOf(address(this));
     }
 
-    function available(string memory name) public view returns(bool) {
-        return IETHRegistrarController(_baseController).available(name);
+    function available(address controller, string memory name) public view returns(bool) {
+        return IETHRegistrarController(controller).available(name);
     }
 
-    function rentPrice(string memory name, uint duration) public view returns(uint) {
-        return IETHRegistrarController(_baseController).rentPrice(name, duration);
+    function rentPrice(address controller, string memory name, uint duration) public view returns(uint) {
+        return IETHRegistrarController(controller).rentPrice(name, duration);
     }
     
-    function makeCommitment(string memory name, address owner, bytes32 secret) public view returns(bytes32) {
-        return makeCommitmentWithConfig(name, owner, secret, address(0), address(0));
+    function makeCommitment(address controller, string memory name, address owner, bytes32 secret) public pure returns(bytes32) {
+        return makeCommitmentWithConfig(controller, name, owner, secret, address(0), address(0));
     }
 
-    function makeCommitmentWithConfig(string memory name, address owner, bytes32 secret, address resolver, address addr) public view returns(bytes32) {
-        return IETHRegistrarController(_baseController).makeCommitmentWithConfig(name, owner, secret, resolver, addr);
+    function makeCommitmentWithConfig(address controller, string memory name, address owner, bytes32 secret, address resolver, address addr) public pure returns(bytes32) {
+        return IETHRegistrarController(controller).makeCommitmentWithConfig(name, owner, secret, resolver, addr);
     }
 
-    function commit(bytes32 commitment) public {
-        IETHRegistrarController(_baseController).commit(commitment);
+    function commit(address controller, bytes32 commitment) public {
+        IETHRegistrarController(controller).commit(commitment);
     }
   
-    function register(string calldata name, address owner, uint duration, bytes32 secret) external payable {
-        registerWithConfig(name, owner, duration, secret, address(0), address(0));
+    function register(address controller, string calldata name, address owner, uint duration, bytes32 secret) external payable {
+        registerWithConfig(controller, name, owner, duration, secret, address(0), address(0));
     }
 
-    function registerWithConfig(string memory name, address owner, uint duration, bytes32 secret, address resolver, address addr) public payable {
-        uint cost = rentPrice(name, duration);
-        require( msg.value >= cost, "BulkEthRegistrarController: Not enough ether sent");
-        require(available(name), "BulkEthRegistrarController: Name has already been registered");
-        // TODO: commission
-        // TODO: cost'u slippage vererek gonder.
+    function registerWithConfig(address controller, string memory name, address owner, uint duration, bytes32 secret, address resolver, address addr) public payable {
+        uint cost = rentPrice(controller, name, duration);
+        uint fee = cost.div(100).mul(_feeRatio);
+        uint costWithFee = cost.add(fee); 
 
-        IETHRegistrarController(_baseController).registerWithConfig{ value: cost }(name, owner, duration, secret, resolver, addr);
+        // TODO: cost'u slippage vererek gonder.
+        require( msg.value >= costWithFee, "BulkEthRegistrarController: Not enough ether sent.");
+        require(available(controller, name), "BulkEthRegistrarController: Name has already been registered");
+         
+        IETHRegistrarController(controller).registerWithConfig{ value: cost }(name, owner, duration, secret, resolver, addr);
 
         emit NameRegistered(name, owner, cost, duration);
     } 
 
-    function renew(string calldata name, uint duration) external payable {
-        uint cost = rentPrice(name, duration);
-        require( msg.value >= cost, "BulkEthRegistrarController: Not enough ether sent");
+    function renew(address controller, string calldata name, uint duration) external payable {
+        uint cost = rentPrice(controller, name, duration);
+        uint fee = cost.div(100).mul(_feeRatio);
+        uint costWithFee = cost.add(fee); 
 
-        // TODO: commission
         // TODO: cost'u slippage vererek gonder.
-
-        IETHRegistrarController(_baseController).renew{ value: cost }(name, duration);
+        require( msg.value >= costWithFee, "BulkEthRegistrarController: Not enough ether sent. Expected: ");
+  
+        IETHRegistrarController(controller).renew{ value: cost }(name, duration);
     }
 
     function getBytes(string calldata secret) public pure returns (bytes32) {
         return bytes32(keccak256(abi.encodePacked(secret)));
     }
 
-    function bulkAvailable(string[] memory names) public view returns (bool[] memory) {
+    function bulkAvailable(address controller, string[] memory names) public view returns (bool[] memory) {
         bool[] memory _availables = new bool[](names.length);
         for (uint i = 0; i < names.length; i++) {
-            _availables[i] = available(names[i]);
+            _availables[i] = available(controller, names[i]);
         }
         return _availables;
     }
 
-    function bulkRentPrice(BulkQuery[] memory query) public view returns(BulkResult[] memory result, uint totalPrice) {
+    function bulkRentPrice(address controller, BulkQuery[] memory query) public view returns(BulkResult[] memory result, uint totalPrice, uint totalPriceWithFee) {
         result = new BulkResult[](query.length);
         for (uint i = 0; i < query.length; i++) {
             BulkQuery memory q = query[i];
-            bool _available = available(q.name);
-            uint _price = rentPrice(q.name, q.duration);
+            bool _available = available(controller, q.name);
+            uint _price = rentPrice(controller, q.name, q.duration);
             totalPrice += _price;
+            totalPriceWithFee += _price.div(100).mul(_feeRatio).add(_price);
             result[i] = BulkResult(q.name, _available, q.duration, _price);
         }
     } 
 
-    function bulkCommit(address owner, BulkQuery[] calldata query, string calldata secret) external { 
-       bulkCommitWithConfig(owner, query, secret, address(0), address(0));
+    function bulkCommit(address controller, address owner, BulkQuery[] calldata query, string calldata secret) external { 
+       bulkCommitWithConfig(controller, owner, query, secret, address(0), address(0));
     }
 
-    function bulkCommitWithConfig(address owner, BulkQuery[] calldata query, string calldata secret, address resolver, address addr) public { 
+    function bulkCommitWithConfig(address controller, address owner, BulkQuery[] calldata query, string calldata secret, address resolver, address addr) public { 
+        bytes32 _secret = getBytes(secret);
         for(uint i = 0; i < query.length; i++) { 
             BulkQuery memory c = query[i]; 
-            bytes32 _secret = getBytes(secret);
-            bytes32 commitment = makeCommitmentWithConfig(c.name, owner, _secret, resolver, addr);
-            commit(commitment);
+            bytes32 commitment = makeCommitmentWithConfig(controller, c.name, owner, _secret, resolver, addr);
+            commit(controller, commitment);
         } 
     }
 
-    function bulkRegister( address owner, BulkQuery[] calldata query, string calldata secret) external payable {
-        bulkRegisterWithConfig(owner, query, secret, address(0), address(0));
+    function bulkRegister(address controller, BulkQuery[] calldata query, string calldata secret) external payable {
+        bulkRegisterWithConfig(controller, query, secret);
     }
 
-    function bulkRegisterWithConfig(address owner, BulkQuery[] calldata query, string calldata secret, address resolver, address addr) public payable {
-        uint256 totalCost;  
-        (, totalCost) = bulkRentPrice(query);
-         
-        // TODO: commmision
+    function bulkRegisterWithConfig(address controller, BulkQuery[] calldata query, string calldata secret) public payable {
+        uint256 totalCost;
+        uint256 totalCostWithFee;
+        BulkResult[] memory result;
+        (result, totalCost, totalCostWithFee) = bulkRentPrice(controller, query);
+ 
         // TODO: cost'u slippage vererek gonder.
-        require(msg.value >= totalCost, "BulkEthRegistrarController: Not enough ether sent");
+        require(msg.value >= totalCostWithFee, "BulkEthRegistrarController: Not enough ether sent. Expected: ");
        
+        bytes32 _secret = getBytes(secret);
         for( uint i = 0; i < query.length; ++i ) {
             BulkQuery memory q = query[i];
+            BulkResult memory r = result[i];
+    
+            IETHRegistrarController(controller).registerWithConfig{ value: r.price }(q.name, q.owner, q.duration, _secret, q.resolver, q.addr);
 
-            require(available(q.name), string.concat("The item has already been registered: ", q.name));
-
-            bytes32 _secret = getBytes(secret);
-            uint cost = rentPrice(q.name, q.duration);
-            IETHRegistrarController(_baseController).registerWithConfig{ value: cost }(q.name, owner, q.duration, _secret, resolver, addr);
-
-            emit NameRegistered(q.name, owner, cost, q.duration);
+            emit NameRegistered(q.name, q.owner, r.price, q.duration);
         } 
     } 
 
-    function bulkRenew(BulkQuery[] calldata query) external payable {
-        uint256 totalCost; 
-        (, totalCost) = bulkRentPrice(query);
-  
-        // TODO: commmision 
+    function bulkRenew(address controller, BulkQuery[] calldata query) external payable {
+        uint256 totalCost;
+        uint256 totalCostWithFee;
+        BulkResult[] memory result;
+        (result, totalCost, totalCostWithFee) = bulkRentPrice(controller, query); 
+ 
         // TODO: cost'u slippage vererek gonder.
-        require( msg.value >= totalCost, "BulkEthRegistrarController: Not enough ether sent");
+        require( msg.value >= totalCostWithFee, "BulkEthRegistrarController: Not enough ether sent. Expected: ");
 
         for( uint i = 0; i < query.length; ++i ) {
             BulkQuery memory q = query[i];
+            BulkResult memory r = result[i];
+             
+            IETHRegistrarController(controller).renew{ value: r.price }(q.name, q.duration);
 
-            uint cost = rentPrice(q.name, q.duration);
-            IETHRegistrarController(_baseController).renew{ value: cost }(q.name, q.duration);
-
-            emit NameRenewed(q.name, msg.sender, cost, q.duration);
-        } 
-
-        
+            emit NameRenewed(q.name, msg.sender, r.price, q.duration);
+        }  
     }
 }
