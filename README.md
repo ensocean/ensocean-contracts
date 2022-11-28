@@ -137,18 +137,18 @@
     }
 
 
-    const tx = await hre.ethers.provider.getTransaction("0x6fe8171d0be1e0a3cf2744be7a8cec5d33cfe0b3d88b7b3f534f3b1543ebd5de");
+const tx = await hre.ethers.provider.getTransaction("0x122b7215b6f87b93d9f6b2357722432853b72847d666d52fa44ad2624986b359");
  
-   console.log(tx)
-   const cancelTransaction = await deployer.sendTransaction({
-    from: '0xa3f6d09b9e7f443244e4e598459d86d2a4159519', 
-  
-    nonce: 35,
-    gasPrice: tx.gasPrice.mul(2),
-    data: "0x",
-    value: 0
-  });
+  console.log(tx)
+  const cancelTransaction = await deployer.sendTransaction({
+   from: '0xA185365cBD2B2aC304E8C187a936fAAa7350A51c', 
+   
+   nonce: 323,
+   gasPrice: ethers.utils.parseUnits("20", "gwei"),
+   data: "0x",
+   value: 0
+ });
 
-  console.log(cancelTransaction.hash);
+ console.log(cancelTransaction.hash);
 
-  process.exit(0);
+ process.exit(0);

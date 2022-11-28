@@ -21,7 +21,7 @@ contract BulkEthRegistrarController is Ownable {
         return _feeRatio;
     } 
     
-    function setFeeRatio(uint feeRatio) onlyOwner external {
+    function setFeeRatio(uint feeRatio) external onlyOwner  {
         _feeRatio = feeRatio;
     } 
 
@@ -113,23 +113,15 @@ contract BulkEthRegistrarController is Ownable {
             result[i] = BulkResult(q.name, _available, q.duration, _price);
         }
     } 
-
-    function bulkCommit(address controller, address owner, BulkQuery[] calldata query, string calldata secret) external { 
-       bulkCommitWithConfig(controller, owner, query, secret, address(0), address(0));
-    }
-
-    function bulkCommitWithConfig(address controller, address owner, BulkQuery[] calldata query, string calldata secret, address resolver, address addr) public { 
+ 
+    function bulkCommitWithConfig(address controller, BulkQuery[] calldata query, string calldata secret) public { 
         bytes32 _secret = getBytes(secret);
         for(uint i = 0; i < query.length; i++) { 
-            BulkQuery memory c = query[i]; 
-            bytes32 commitment = makeCommitmentWithConfig(controller, c.name, owner, _secret, resolver, addr);
+            BulkQuery memory q = query[i]; 
+            bytes32 commitment = makeCommitmentWithConfig(controller, q.name, q.owner, _secret, q.resolver, q.addr);
             commit(controller, commitment);
         } 
-    }
-
-    function bulkRegister(address controller, BulkQuery[] calldata query, string calldata secret) external payable {
-        bulkRegisterWithConfig(controller, query, secret);
-    }
+    } 
 
     function bulkRegisterWithConfig(address controller, BulkQuery[] calldata query, string calldata secret) public payable {
         uint256 totalCost;

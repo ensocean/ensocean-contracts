@@ -2,7 +2,7 @@ const {
   time
 } = require("@nomicfoundation/hardhat-network-helpers");
 const { anyValue } = require("@nomicfoundation/hardhat-chai-matchers/withArgs");
-const { expect } = require("chai");
+const { expect } = require("chai"); 
 
 const BASE_CONTROLLER = process.env.BASE_CONTROLLER;
 const initialAmount = ethers.utils.parseEther("100");
@@ -65,20 +65,20 @@ describe("Controller", function () {
     it("Should set fee by the owner", async function () {
       const { controller, fake } = await deployController();
 
-      await expect(controller.setFee(3)).not.to.be.reverted;
+      await expect(controller.setFeeRatio(3)).not.to.be.reverted;
     });  
 
     it("Should not set fee by the other account", async function () {
       const { controller, other } = await deployController();
 
-      await expect(controller.connect(other).setFee(0)).to.be.reverted;
+      await expect(controller.connect(other).setFeeRatio(0)).to.be.reverted;
     }); 
 
     it("Should fee equal to new fee", async function () {
       const { controller, fake } = await deployController();
 
-      await controller.setFee(4);
-      expect(await controller.getFee()).to.equal(4);
+      await controller.setFeeRatio(4);
+      expect(await controller.getFeeRatio()).to.equal(4);
     }); 
   }); 
    
