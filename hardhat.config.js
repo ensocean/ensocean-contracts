@@ -1,7 +1,6 @@
 
 require("dotenv").config();
 require("hardhat-gas-reporter");
-
 require("@nomicfoundation/hardhat-toolbox"); 
  
 const {ALCHEMY_API_KEY, DEPLOYER_PRIVATE_KEY} = process.env;

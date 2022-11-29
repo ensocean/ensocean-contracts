@@ -7,4 +7,5 @@ struct BulkResult {
     bool available; 
     uint256 duration;
     uint price;
+    uint fee;
 }

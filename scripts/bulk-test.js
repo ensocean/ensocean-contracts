@@ -6,7 +6,7 @@ const CONTROLLER_ADDRESS = process.env.CONTROLLER_ADDRESS;
 const OWNER = process.env.OWNER;
 const SECRET = process.env.SECRET;
 const RESOLVER = process.env.RESOLVER;
-const BULK_QUERY = [{name: "loremipsumdolor27", duration: 41556952, owner: OWNER, resolver: RESOLVER, addr: OWNER }, {name: "loremipsumdolor28", duration: 31556952, owner: OWNER, resolver: RESOLVER, addr: OWNER }];
+const BULK_QUERY = [{name: "loremipsumdolor30", duration: 41556952, owner: OWNER, resolver: RESOLVER, addr: OWNER }, {name: "loremipsumdolor31", duration: 31556952, owner: OWNER, resolver: RESOLVER, addr: OWNER }];
  
 async function main() {  
  
@@ -32,7 +32,7 @@ async function main() {
   console.log("TotalServiceFee --> "+ hre.ethers.utils.formatEther(totalCostWithFee.sub(totalCost)));
 
   console.log("Commiting...");
-  const commitTx = await controller.connect(deployer).bulkCommitWithConfig(BASE_CONTROLLER, OWNER, BULK_QUERY, SECRET, RESOLVER, OWNER);
+  const commitTx = await controller.connect(deployer).bulkCommit(BASE_CONTROLLER, BULK_QUERY, SECRET);
   await commitTx.wait();
   console.log("Commit transaction completed. Hash: "+ commitTx.hash);
 
@@ -40,7 +40,7 @@ async function main() {
   await delay(60000);
 
   console.log("Registering...");
-  const registerTx = await controller.connect(deployer).bulkRegisterWithConfig(BASE_CONTROLLER, BULK_QUERY, SECRET, { value: totalCostWithFee });
+  const registerTx = await controller.connect(deployer).bulkRegister(BASE_CONTROLLER, BULK_QUERY, SECRET, { value: totalCostWithFee });
   await registerTx.wait();
   console.log("Register transaction completed. Hash: "+ registerTx.hash);
 

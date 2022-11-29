@@ -12,8 +12,8 @@ import "./BulkResult.sol";
 contract BulkEthRegistrarController is Ownable {
     using SafeMath for uint;
 
-    event NameRegistered(string name,  address indexed owner, uint256 cost,  uint256 duration);
-    event NameRenewed(string name,  address indexed owner, uint256 cost,  uint256 duration);
+    event NameRegistered(string name, address indexed owner, uint256 cost, uint fee,  uint256 duration);
+    event NameRenewed(string name, address indexed owner, uint256 cost, uint fee, uint256 duration);
 
     uint private _feeRatio = 10; 
       
@@ -69,14 +69,13 @@ contract BulkEthRegistrarController is Ownable {
         uint cost = rentPrice(controller, name, duration);
         uint fee = cost.div(100).mul(_feeRatio);
         uint costWithFee = cost.add(fee); 
-
-        // TODO: cost'u slippage vererek gonder.
-        require( msg.value >= costWithFee, "BulkEthRegistrarController: Not enough ether sent.");
+        
+        require(msg.value >= costWithFee, "BulkEthRegistrarController: Not enough ether sent.");
         require(available(controller, name), "BulkEthRegistrarController: Name has already been registered");
-         
+
         IETHRegistrarController(controller).registerWithConfig{ value: cost }(name, owner, duration, secret, resolver, addr);
 
-        emit NameRegistered(name, owner, cost, duration);
+        emit NameRegistered(name, owner, cost, fee, duration);
     } 
 
     function renew(address controller, string calldata name, uint duration) external payable {
@@ -84,10 +83,11 @@ contract BulkEthRegistrarController is Ownable {
         uint fee = cost.div(100).mul(_feeRatio);
         uint costWithFee = cost.add(fee); 
 
-        // TODO: cost'u slippage vererek gonder.
         require( msg.value >= costWithFee, "BulkEthRegistrarController: Not enough ether sent. Expected: ");
-  
+
         IETHRegistrarController(controller).renew{ value: cost }(name, duration);
+
+        emit NameRenewed(name, msg.sender, cost, fee, duration);
     }
 
     function getBytes(string calldata secret) public pure returns (bytes32) {
@@ -108,13 +108,14 @@ contract BulkEthRegistrarController is Ownable {
             BulkQuery memory q = query[i];
             bool _available = available(controller, q.name);
             uint _price = rentPrice(controller, q.name, q.duration);
+            uint _fee = _price.div(100).mul(_feeRatio);
             totalPrice += _price;
             totalPriceWithFee += _price.div(100).mul(_feeRatio).add(_price);
-            result[i] = BulkResult(q.name, _available, q.duration, _price);
+            result[i] = BulkResult(q.name, _available, q.duration, _price, _fee);
         }
     } 
  
-    function bulkCommitWithConfig(address controller, BulkQuery[] calldata query, string calldata secret) public { 
+    function bulkCommit(address controller, BulkQuery[] calldata query, string calldata secret) public { 
         bytes32 _secret = getBytes(secret);
         for(uint i = 0; i < query.length; i++) { 
             BulkQuery memory q = query[i]; 
@@ -123,24 +124,24 @@ contract BulkEthRegistrarController is Ownable {
         } 
     } 
 
-    function bulkRegisterWithConfig(address controller, BulkQuery[] calldata query, string calldata secret) public payable {
+    function bulkRegister(address controller, BulkQuery[] calldata query, string calldata secret) public payable {
         uint256 totalCost;
         uint256 totalCostWithFee;
         BulkResult[] memory result;
         (result, totalCost, totalCostWithFee) = bulkRentPrice(controller, query);
- 
-        // TODO: cost'u slippage vererek gonder.
+
         require(msg.value >= totalCostWithFee, "BulkEthRegistrarController: Not enough ether sent. Expected: ");
-       
+ 
         bytes32 _secret = getBytes(secret);
+        
         for( uint i = 0; i < query.length; ++i ) {
             BulkQuery memory q = query[i];
             BulkResult memory r = result[i];
     
             IETHRegistrarController(controller).registerWithConfig{ value: r.price }(q.name, q.owner, q.duration, _secret, q.resolver, q.addr);
 
-            emit NameRegistered(q.name, q.owner, r.price, q.duration);
-        } 
+            emit NameRegistered(q.name, q.owner, r.price, r.fee, q.duration);
+        }
     } 
 
     function bulkRenew(address controller, BulkQuery[] calldata query) external payable {
@@ -149,7 +150,6 @@ contract BulkEthRegistrarController is Ownable {
         BulkResult[] memory result;
         (result, totalCost, totalCostWithFee) = bulkRentPrice(controller, query); 
  
-        // TODO: cost'u slippage vererek gonder.
         require( msg.value >= totalCostWithFee, "BulkEthRegistrarController: Not enough ether sent. Expected: ");
 
         for( uint i = 0; i < query.length; ++i ) {
@@ -158,7 +158,7 @@ contract BulkEthRegistrarController is Ownable {
              
             IETHRegistrarController(controller).renew{ value: r.price }(q.name, q.duration);
 
-            emit NameRenewed(q.name, msg.sender, r.price, q.duration);
+            emit NameRenewed(q.name, msg.sender, r.price, r.fee, q.duration);
         }  
     }
 }

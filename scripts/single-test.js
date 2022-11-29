@@ -7,7 +7,7 @@ const CONTROLLER_ADDRESS = process.env.CONTROLLER_ADDRESS;
 const OWNER = process.env.OWNER;
 const SECRET = process.env.SECRET;
 const RESOLVER = process.env.RESOLVER;
-const NAME = "loremipsum9";
+const NAME = "loremipsum10";
 const DURATION = 31556952;
 
 async function main() {  

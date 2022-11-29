@@ -1,6 +1,4 @@
-const {
-  time
-} = require("@nomicfoundation/hardhat-network-helpers");
+require("@nomicfoundation/hardhat-network-helpers");
 const { anyValue } = require("@nomicfoundation/hardhat-chai-matchers/withArgs");
 const { expect } = require("chai"); 
 
@@ -63,7 +61,7 @@ describe("Controller", function () {
   describe("Fee", function () {
 
     it("Should set fee by the owner", async function () {
-      const { controller, fake } = await deployController();
+      const { controller } = await deployController();
 
       await expect(controller.setFeeRatio(3)).not.to.be.reverted;
     });  
