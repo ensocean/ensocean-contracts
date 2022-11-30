@@ -67,7 +67,7 @@ contract BulkEthRegistrarController is Ownable {
 
     function registerWithConfig(address controller, string memory name, address owner, uint duration, bytes32 secret, address resolver, address addr) public payable {
         uint cost = rentPrice(controller, name, duration);
-        uint fee = cost.div(100).mul(_feeRatio);
+        uint fee = cost.mul(_feeRatio).div(100);
         uint costWithFee = cost.add(fee); 
         
         require(msg.value >= costWithFee, "BulkEthRegistrarController: Not enough ether sent.");
@@ -80,7 +80,7 @@ contract BulkEthRegistrarController is Ownable {
 
     function renew(address controller, string calldata name, uint duration) external payable {
         uint cost = rentPrice(controller, name, duration);
-        uint fee = cost.div(100).mul(_feeRatio);
+        uint fee = cost.mul(_feeRatio).div(100);
         uint costWithFee = cost.add(fee); 
 
         require( msg.value >= costWithFee, "BulkEthRegistrarController: Not enough ether sent. Expected: ");
@@ -108,9 +108,9 @@ contract BulkEthRegistrarController is Ownable {
             BulkQuery memory q = query[i];
             bool _available = available(controller, q.name);
             uint _price = rentPrice(controller, q.name, q.duration);
-            uint _fee = _price.div(100).mul(_feeRatio);
+            uint _fee = _price.mul(_feeRatio).div(100);
             totalPrice += _price;
-            totalPriceWithFee += _price.div(100).mul(_feeRatio).add(_price);
+            totalPriceWithFee += _price.mul(_feeRatio).div(100).add(_price);
             result[i] = BulkResult(q.name, _available, q.duration, _price, _fee);
         }
     } 
