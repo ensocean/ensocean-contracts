@@ -8,7 +8,8 @@ module.exports = {
   solidity: "0.8.12",
   etherscan: {
     apiKey: {
-      mainnet: ETHERSCAN_API_KEY
+      mainnet: ETHERSCAN_API_KEY,
+      goerli: ETHERSCAN_API_KEY
     }
   },
   networks: {
