@@ -28,4 +28,4 @@ $ npx hardhat run scripts/deploy-bulk-registrar.js --network goerli
 ## Goerli
 `0x9A2f24D9874a53e39f5a149Cd086EbECfa5b184a`
 ## Mainnet
-`0x9A2f24D9874a53e39f5a149Cd086EbECfa5b184a`
+`0x655b9CE192A77C33A782CEF786EeEEB6735e4202`
