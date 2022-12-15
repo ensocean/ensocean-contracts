@@ -1,11 +1,19 @@
 
 require("dotenv").config(); 
 require("@nomicfoundation/hardhat-toolbox"); 
+require("@nomiclabs/hardhat-etherscan");
+
  
 const {ALCHEMY_API_KEY, DEPLOYER_PRIVATE_KEY, ETHERSCAN_API_KEY} = process.env;
-
+ 
 module.exports = {
-  solidity: "0.8.12",
+  solidity: {
+    compilers: [
+      {
+        version: "0.8.12"
+      }
+    ]
+  },
   etherscan: {
     apiKey: {
       mainnet: ETHERSCAN_API_KEY,
